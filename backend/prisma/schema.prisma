@@ -1,0 +1,333 @@
+// LaundryOS — Multi-Tenant Laundry Billing & Management
+// Tenancy model: shared database, every tenant row carries `shopId`.
+// Data flow:  Shop → Customer → Order → OrderItem → Invoice → Payment
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Enums
+// ─────────────────────────────────────────────────────────────────────
+
+enum Role {
+  PLATFORM_ADMIN // cross-tenant super admin (shopId is null)
+  SHOP_ADMIN // owner / manager of one shop
+  BILLING_EXECUTIVE // counter staff: orders, bills, payments
+  LAUNDRY_STAFF // processing: order status updates only
+}
+
+enum ShopStatus {
+  ACTIVE
+  SUSPENDED
+  TRIAL
+}
+
+enum SubscriptionPlan {
+  TRIAL
+  STARTER
+  PROFESSIONAL
+  ENTERPRISE
+}
+
+enum ServiceType {
+  WASH
+  IRON
+  WASH_AND_IRON
+  DRY_CLEAN
+}
+
+enum OrderStatus {
+  CREATED
+  RECEIVED
+  WASHING
+  DRYING
+  IRONING
+  QUALITY_CHECK
+  READY
+  DELIVERED
+  CANCELLED
+}
+
+enum InvoiceStatus {
+  PAID
+  PARTIALLY_PAID
+  PENDING
+  REFUNDED
+}
+
+enum PaymentMode {
+  CASH
+  UPI
+  CARD
+  BANK_TRANSFER
+}
+
+enum DiscountType {
+  NONE
+  FIXED
+  PERCENTAGE
+}
+
+enum GstMode {
+  EXCLUSIVE // tax added on top of subtotal
+  INCLUSIVE // subtotal already includes tax
+  NONE
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Tenant root
+// ─────────────────────────────────────────────────────────────────────
+
+model Shop {
+  id        String     @id @default(uuid())
+  name      String
+  gstNumber String?
+  address   String?
+  phone     String?
+  email     String?
+  logoUrl   String?
+  status    ShopStatus @default(TRIAL)
+
+  // Tax defaults applied to new orders
+  gstMode    GstMode @default(NONE)
+  gstPercent Float   @default(0)
+
+  subscriptionPlan    SubscriptionPlan @default(TRIAL)
+  subscriptionEndsAt  DateTime?
+  invoicePrefix       String           @default("INV")
+  nextInvoiceSequence Int              @default(1)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users     User[]
+  customers Customer[]
+  services  Service[]
+  orders    Order[]
+  invoices  Invoice[]
+  payments  Payment[]
+  auditLogs AuditLog[]
+
+  @@index([status])
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Users & RBAC
+// ─────────────────────────────────────────────────────────────────────
+
+model User {
+  id           String  @id @default(uuid())
+  email        String  @unique
+  passwordHash String
+  name         String
+  role         Role
+  isActive     Boolean @default(true)
+
+  // null for PLATFORM_ADMIN; set for all shop-scoped roles
+  shopId String?
+  shop   Shop?   @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  lastLoginAt DateTime?
+
+  createdOrders Order[]    @relation("OrderCreatedBy")
+  auditLogs     AuditLog[]
+
+  @@index([shopId])
+  @@index([role])
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Customers
+// ─────────────────────────────────────────────────────────────────────
+
+model Customer {
+  id            String  @id @default(uuid())
+  name          String
+  mobile        String
+  email         String?
+  address       String?
+  loyaltyPoints Int     @default(0)
+  notes         String?
+
+  shopId String
+  shop   Shop   @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  orders Order[]
+
+  // A mobile number is unique within a shop, not across the platform
+  @@unique([shopId, mobile])
+  @@index([shopId])
+  @@index([shopId, name])
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Services & Pricing (shop-specific catalog)
+// ─────────────────────────────────────────────────────────────────────
+
+model Service {
+  id          String      @id @default(uuid())
+  itemName    String // e.g. "Shirt", "Saree", "Blanket"
+  serviceType ServiceType
+  price       Float
+  isActive    Boolean     @default(true)
+
+  shopId String
+  shop   Shop   @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  orderItems OrderItem[]
+
+  @@unique([shopId, itemName, serviceType])
+  @@index([shopId])
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Orders & line items
+// ─────────────────────────────────────────────────────────────────────
+
+model Order {
+  id          String      @id @default(uuid())
+  orderNumber String // human-friendly, unique per shop
+  status      OrderStatus @default(CREATED)
+
+  shopId String
+  shop   Shop   @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id])
+
+  createdById String?
+  createdBy   User?   @relation("OrderCreatedBy", fields: [createdById], references: [id])
+
+  // Money (computed at creation, snapshotted on the order)
+  subtotal        Float        @default(0)
+  discountType    DiscountType @default(NONE)
+  discountValue   Float        @default(0) // % or fixed amount as entered
+  discountAmount  Float        @default(0) // resolved rupee amount
+  expressCharge   Float        @default(0)
+  pickupCharge    Float        @default(0)
+  deliveryCharge  Float        @default(0)
+  specialHandling Float        @default(0)
+  taxableAmount   Float        @default(0)
+  gstMode         GstMode      @default(NONE)
+  gstPercent      Float        @default(0)
+  taxAmount       Float        @default(0)
+  grandTotal      Float        @default(0)
+
+  notes        String?
+  expectedAt   DateTime?
+  deliveredAt  DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items   OrderItem[]
+  invoice Invoice?
+
+  @@unique([shopId, orderNumber])
+  @@index([shopId])
+  @@index([shopId, status])
+  @@index([customerId])
+}
+
+model OrderItem {
+  id          String      @id @default(uuid())
+  orderId     String
+  order       Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  // Snapshot the service details so later price edits don't rewrite history
+  serviceId   String?
+  service     Service?    @relation(fields: [serviceId], references: [id])
+  itemName    String
+  serviceType ServiceType
+  unitPrice   Float
+  quantity    Int
+  lineTotal   Float
+
+  @@index([orderId])
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Invoices & payments
+// ─────────────────────────────────────────────────────────────────────
+
+model Invoice {
+  id            String        @id @default(uuid())
+  invoiceNumber String
+  status        InvoiceStatus @default(PENDING)
+
+  shopId String
+  shop   Shop   @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  orderId String @unique
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  grandTotal Float
+  amountPaid Float @default(0)
+  balance    Float @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  payments Payment[]
+
+  @@unique([shopId, invoiceNumber])
+  @@index([shopId])
+  @@index([shopId, status])
+}
+
+model Payment {
+  id        String      @id @default(uuid())
+  amount    Float
+  mode      PaymentMode
+  reference String? // UPI txn id / card ref etc.
+  note      String?
+
+  shopId String
+  shop   Shop   @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  invoiceId String
+  invoice   Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  isRefund  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([shopId])
+  @@index([invoiceId])
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Audit log
+// ─────────────────────────────────────────────────────────────────────
+
+model AuditLog {
+  id     String @id @default(uuid())
+  action String // e.g. "ORDER_CREATED", "PRICE_CHANGED", "PAYMENT_RECORDED"
+  entity String // e.g. "Order", "Service"
+  entityId String?
+  meta   Json?
+
+  shopId String?
+  shop   Shop?   @relation(fields: [shopId], references: [id], onDelete: SetNull)
+
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@index([shopId])
+  @@index([entity, entityId])
+}

@@ -1,0 +1,25 @@
+# Render.com free-tier blueprint: a web service + a free Postgres database.
+services:
+  - type: web
+    name: laundryos-api
+    runtime: node
+    plan: free
+    buildCommand: npm install && npx prisma generate && npm run build
+    startCommand: npx prisma migrate deploy && npm run prisma:seed && npm run start:prod
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: laundryos-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: 7d
+      - key: NODE_ENV
+        value: production
+      - key: CORS_ORIGIN
+        sync: false # set to your deployed frontend URL
+
+databases:
+  - name: laundryos-db
+    plan: free

@@ -44,6 +44,18 @@ const NAV: { href: string; label: string; icon: typeof Users; roles?: Role[] }[]
       roles: ['SHOP_ADMIN'],
     },
     {
+      href: '/shop-staff',
+      label: 'My Staff',
+      icon: UserCog,
+      roles: ['SHOP_ADMIN'],
+    },
+    {
+      href: '/deliveries',
+      label: 'Deliveries',
+      icon: Truck,
+      roles: ['SHOP_ADMIN', 'BILLING_EXECUTIVE'],
+    },
+    {
       href: '/shops',
       label: 'Shops',
       icon: Building2,

@@ -83,6 +83,7 @@ export interface Order {
   customer?: Customer;
   items?: OrderItem[];
   invoice?: Invoice | null;
+  assignedTo?: { id: string; name: string; email?: string } | null;
   shop?: {
     name: string;
     address?: string | null;

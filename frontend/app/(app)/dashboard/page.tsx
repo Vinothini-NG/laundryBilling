@@ -22,6 +22,8 @@ import { useAuth } from '@/lib/store';
 import type { ShopDashboard } from '@/lib/types';
 import { inr } from '@/lib/format';
 import { Card } from '@/components/ui';
+import StaffDashboard from './staff-dashboard';
+import PlatformDashboard from './platform-dashboard';
 
 function Stat({
   icon: Icon,
@@ -50,6 +52,8 @@ function Stat({
 export default function DashboardPage() {
   const user = useAuth((s) => s.user);
   const isPlatform = user?.role === 'PLATFORM_ADMIN';
+  const isStaff = user?.role === 'LAUNDRY_STAFF';
+  if (isStaff) return <StaffDashboard />;
 
   const { data, isLoading } = useQuery<ShopDashboard>({
     queryKey: ['dashboard', 'shop'],
@@ -57,18 +61,7 @@ export default function DashboardPage() {
     enabled: !isPlatform,
   });
 
-  if (isPlatform) {
-    return (
-      <div>
-        <h1 className="mb-1 text-2xl font-bold text-slate-800">
-          Platform Overview
-        </h1>
-        <p className="text-sm text-slate-500">
-          Manage every shop from the <strong>Shops</strong> page.
-        </p>
-      </div>
-    );
-  }
+  if (isPlatform) return <PlatformDashboard />;
 
   if (isLoading || !data) {
     return <p className="text-slate-400">Loading dashboard…</p>;

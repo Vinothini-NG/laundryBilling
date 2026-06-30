@@ -1,13 +1,17 @@
 'use client';
 
+import { useState } from 'react';
+
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
+import PrintBill from './print-bill';
 import type { Order } from '@/lib/types';
 import { inr, dateTime } from '@/lib/format';
 import { Badge, Card } from '@/components/ui';
 
 export default function OrdersPage() {
+  const [printOrder, setPrintOrder] = useState<any>(null);
   const { data: orders = [], isLoading } = useQuery<Order[]>({
     queryKey: ['orders'],
     queryFn: async () => (await api.get('/orders')).data,
@@ -35,6 +39,7 @@ export default function OrdersPage() {
                   <th className="py-2">Status</th>
                   <th className="py-2">Payment</th>
                   <th className="py-2 text-right">Total</th>
+                  <th className="py-2 text-center">Bill</th>
                 </tr>
               </thead>
               <tbody>
@@ -66,6 +71,12 @@ export default function OrdersPage() {
                     <td className="py-3 text-right font-medium text-slate-700">
                       {inr(o.grandTotal)}
                     </td>
+                    <td className="py-3 text-center">
+                      <button onClick={() => setPrintOrder(o)}
+                        className="rounded-lg bg-sky-100 px-3 py-1 text-xs font-semibold text-sky-700 hover:bg-sky-200">
+                        View Bill
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -73,6 +84,9 @@ export default function OrdersPage() {
           </div>
         )}
       </Card>
+      {printOrder && (
+        <PrintBill order={printOrder} onClose={() => setPrintOrder(null)} />
+      )}
     </div>
   );
 }

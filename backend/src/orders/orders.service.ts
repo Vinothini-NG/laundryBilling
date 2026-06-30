@@ -14,7 +14,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../common/types';
 import { resolveShopId } from '../common/tenant';
 import { computeBill } from './billing';
-import { CreateOrderDto, UpdateOrderStatusDto } from './orders.dto';
+import { CreateOrderDto, UpdateOrderStatusDto, AssignOrderDto } from './orders.dto';
 
 @Injectable()
 export class OrdersService {
@@ -136,7 +136,8 @@ export class OrdersService {
       },
       include: {
         customer: { select: { id: true, name: true, mobile: true } },
-        invoice: { select: { status: true, balance: true, grandTotal: true } },
+        invoice: { select: { status: true, balance: true, grandTotal: true, id: true } },
+        assignedTo: { select: { id: true, name: true } },
       },
       orderBy: { createdAt: 'desc' },
       take: 100,
@@ -151,6 +152,7 @@ export class OrdersService {
         customer: true,
         invoice: { include: { payments: true } },
         createdBy: { select: { id: true, name: true } },
+        assignedTo: { select: { id: true, name: true, email: true } },
         shop: {
           select: {
             name: true,
@@ -185,4 +187,32 @@ export class OrdersService {
     });
     return updated;
   }
+
+  async assignOrder(user: AuthUser, id: string, dto: AssignOrderDto) {
+    const order = await this.findOne(user, id);
+
+    const updated = await this.prisma.order.update({
+      where: { id },
+      data: { assignedToId: dto.assignedToId ?? null },
+      include: {
+        assignedTo: { select: { id: true, name: true, email: true } },
+        customer: { select: { id: true, name: true, mobile: true } },
+        invoice: { select: { status: true, balance: true, grandTotal: true } },
+      },
+    });
+
+    await this.prisma.auditLog.create({
+      data: {
+        action: 'ORDER_ASSIGNED',
+        entity: 'Order',
+        entityId: id,
+        shopId: order.shopId,
+        userId: user.userId,
+        meta: { assignedToId: dto.assignedToId },
+      },
+    });
+
+    return updated;
+  }
+
 }

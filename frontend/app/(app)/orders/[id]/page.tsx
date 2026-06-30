@@ -30,6 +30,8 @@ export default function OrderDetailPage({
   const [payAmount, setPayAmount] = useState('');
   const [payMode, setPayMode] = useState<PaymentMode>('CASH');
 
+  const [showPrint, setShowPrint] = useState(false);
+  const [showBill, setShowBill] = useState(false);
   const { data: order, isLoading } = useQuery<Order>({
     queryKey: ['order', id],
     queryFn: async () => (await api.get(`/orders/${id}`)).data,

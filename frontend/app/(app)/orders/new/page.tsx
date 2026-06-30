@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { Plus, Trash2 } from 'lucide-react';
 import { api, apiError } from '@/lib/api';
@@ -33,7 +33,10 @@ export default function NewOrderPage() {
   const router = useRouter();
   const user = useAuth((s) => s.user);
 
+  const qc = useQueryClient();
   const [customerId, setCustomerId] = useState('');
+  const [showAddCustomer, setShowAddCustomer] = useState(false);
+  const [newCust, setNewCust] = useState({ name: '', mobile: '', email: '', address: '' });
   const [lines, setLines] = useState<Line[]>([]);
   const [discountType, setDiscountType] = useState<DiscountType>('NONE');
   const [discountValue, setDiscountValue] = useState(0);
@@ -134,18 +137,61 @@ export default function NewOrderPage() {
         {/* Left: order builder */}
         <div className="space-y-6 lg:col-span-2">
           <Card className="p-5">
-            <Select
-              label="Customer"
-              value={customerId}
-              onChange={(e) => setCustomerId(e.target.value)}
-            >
-              <option value="">Select a customer…</option>
-              {customers.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name} · {c.mobile}
-                </option>
-              ))}
-            </Select>
+            <div className="flex items-end gap-2">
+              <div className="flex-1">
+                <Select
+                  label="Customer"
+                  value={customerId}
+                  onChange={(e) => setCustomerId(e.target.value)}
+                >
+                  <option value="">Select a customer…</option>
+                  {customers.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name} · {c.mobile}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+              <button
+                onClick={() => setShowAddCustomer(true)}
+                className="mb-[2px] flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-600 text-white hover:bg-emerald-700"
+                title="Add New Customer"
+              >
+                <Plus size={20} />
+              </button>
+            </div>
+            {showAddCustomer && (
+              <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-4 space-y-3">
+                <h3 className="font-semibold text-slate-700">Add New Customer</h3>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <Input label="Name *" placeholder="Customer name" value={newCust.name}
+                    onChange={(e) => setNewCust({ ...newCust, name: e.target.value })} />
+                  <Input label="Mobile *" placeholder="9876543210" value={newCust.mobile}
+                    onChange={(e) => setNewCust({ ...newCust, mobile: e.target.value })} />
+                  <Input label="Email" placeholder="email@example.com" value={newCust.email}
+                    onChange={(e) => setNewCust({ ...newCust, email: e.target.value })} />
+                  <Input label="Address" placeholder="Full address" value={newCust.address}
+                    onChange={(e) => setNewCust({ ...newCust, address: e.target.value })} />
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    disabled={!newCust.name || !newCust.mobile}
+                    onClick={async () => {
+                      try {
+                        const res = await api.post('/customers', newCust);
+                        toast.success('Customer added!');
+                        setCustomerId(res.data.id);
+                        setShowAddCustomer(false);
+                        setNewCust({ name: '', mobile: '', email: '', address: '' });
+                        qc.invalidateQueries({ queryKey: ['customers'] });
+                      } catch (e) { toast.error(apiError(e)); }
+                    }}>
+                    <Plus size={14} /> Add Customer
+                  </Button>
+                  <Button variant="secondary" onClick={() => setShowAddCustomer(false)}>Cancel</Button>
+                </div>
+              </div>
+            )}
           </Card>
 
           <Card className="p-5">

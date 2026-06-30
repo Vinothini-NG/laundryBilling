@@ -13,6 +13,10 @@ import {
   Building2,
   LogOut,
   Shirt,
+  UserCog,
+  BarChart3,
+  Settings,
+  Truck,
 } from 'lucide-react';
 import { useAuth } from '@/lib/store';
 import type { Role } from '@/lib/types';
@@ -43,6 +47,24 @@ const NAV: { href: string; label: string; icon: typeof Users; roles?: Role[] }[]
       href: '/shops',
       label: 'Shops',
       icon: Building2,
+      roles: ['PLATFORM_ADMIN'],
+    },
+    {
+      href: '/staff',
+      label: 'Staff',
+      icon: UserCog,
+      roles: ['PLATFORM_ADMIN'],
+    },
+    {
+      href: '/reports',
+      label: 'Reports',
+      icon: BarChart3,
+      roles: ['PLATFORM_ADMIN'],
+    },
+    {
+      href: '/settings',
+      label: 'Settings',
+      icon: Settings,
       roles: ['PLATFORM_ADMIN'],
     },
   ];

@@ -10,7 +10,7 @@ import {
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { OrderStatus, Role } from '@prisma/client';
 import { OrdersService } from './orders.service';
-import { CreateOrderDto, UpdateOrderStatusDto } from './orders.dto';
+import { CreateOrderDto, UpdateOrderStatusDto, AssignOrderDto } from './orders.dto';
 import { CurrentUser, Roles } from '../common/decorators';
 import { AuthUser } from '../common/types';
 
@@ -56,4 +56,15 @@ export class OrdersController {
   ) {
     return this.orders.updateStatus(user, id, dto);
   }
+
+  @Patch(':id/assign')
+  @Roles(Role.SHOP_ADMIN, Role.PLATFORM_ADMIN)
+  assignOrder(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() dto: AssignOrderDto,
+  ) {
+    return this.orders.assignOrder(user, id, dto);
+  }
+
 }

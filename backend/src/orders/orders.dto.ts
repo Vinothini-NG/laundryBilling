@@ -68,3 +68,9 @@ export class UpdateOrderStatusDto {
   @IsEnum(OrderStatus)
   status: OrderStatus;
 }
+
+export class AssignOrderDto {
+  @IsOptional()
+  @IsUUID()
+  assignedToId?: string | null;
+}

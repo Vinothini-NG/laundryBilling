@@ -137,8 +137,9 @@ model User {
   updatedAt   DateTime  @updatedAt
   lastLoginAt DateTime?
 
-  createdOrders Order[]    @relation("OrderCreatedBy")
-  auditLogs     AuditLog[]
+  createdOrders  Order[]    @relation("OrderCreatedBy")
+  assignedOrders Order[]    @relation("OrderAssignedTo")
+  auditLogs      AuditLog[]
 
   @@index([shopId])
   @@index([role])
@@ -211,6 +212,9 @@ model Order {
 
   createdById String?
   createdBy   User?   @relation("OrderCreatedBy", fields: [createdById], references: [id])
+
+  assignedToId String?
+  assignedTo   User?   @relation("OrderAssignedTo", fields: [assignedToId], references: [id])
 
   // Money (computed at creation, snapshotted on the order)
   subtotal        Float        @default(0)
